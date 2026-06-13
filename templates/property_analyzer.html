@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block title %}Property Analyzer — Dubai RE Intelligence{% endblock %}
+{% block page_title %}Property Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-intro">
+  <i class="bi bi-search-heart-fill gold"></i>
+  <div>
+    <h2>AI Property Analyzer</h2>
+    <p class="muted">Enter property details to receive a full investment analysis: ROI, rental yield, appreciation forecast, cash flow, and AI recommendations.</p>
+  </div>
+</div>
+
+<div class="two-col">
+
+  <!-- ── INPUT FORM ── -->
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title"><i class="bi bi-pencil-fill gold"></i> Property Details</h3>
+    </div>
+    <div class="card-body">
+      <form id="analyzerForm" onsubmit="analyzeProperty(event)">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Property Name</label>
+            <input type="text" id="property_name" class="form-input"
+                   placeholder="e.g. Marina Heights 2BR" required />
+          </div>
+          <div class="form-group">
+            <label>Community</label>
+            <select id="community" class="form-input" required>
+              <option value="">Select community...</option>
+              {% for c in communities %}
+              <option value="{{ c }}">{{ c }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Property Type</label>
+            <select id="property_type" class="form-input">
+              <option>Apartment</option>
+              <option>Studio</option>
+              <option>Villa</option>
+              <option>Townhouse</option>
+              <option>Penthouse</option>
+              <option>Office</option>
+              <option>Retail</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="prop_status" class="form-input">
+              <option>Ready</option>
+              <option>Off-Plan</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row three-col">
+          <div class="form-group">
+            <label>Bedrooms</label>
+            <select id="bedrooms" class="form-input">
+              <option value="0">Studio</option>
+              <option value="1">1 BR</option>
+              <option value="2" selected>2 BR</option>
+              <option value="3">3 BR</option>
+              <option value="4">4 BR</option>
+              <option value="5">5 BR</option>
+              <option value="6">6 BR+</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Bathrooms</label>
+            <select id="bathrooms" class="form-input">
+              <option value="1">1</option>
+              <option value="2" selected>2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5+</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Area (Sq Ft)</label>
+            <input type="number" id="area_sqft" class="form-input" placeholder="950" required min="1" />
+          </div>
+        </div>
+
+        <div class="section-divider">Financial Details</div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Purchase Price (AED)</label>
+            <input type="number" id="purchase_price" class="form-input" placeholder="1,850,000" required min="1" />
+          </div>
+          <div class="form-group">
+            <label>Expected Annual Rent (AED)</label>
+            <input type="number" id="annual_rent" class="form-input" placeholder="115,000" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Annual Service Charges (AED)</label>
+            <input type="number" id="service_charges" class="form-input" placeholder="18,000" />
+          </div>
+          <div class="form-group">
+            <label>Vacancy Allowance (%)</label>
+            <input type="number" id="vacancy" class="form-input" value="5" min="0" max="50" />
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-gold btn-full" id="analyzeBtn">
+          <i class="bi bi-cpu-fill"></i> Run AI Analysis
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── RESULTS PANEL ── -->
+  <div id="resultsPanel" style="display:none">
+
+    <!-- Score Header -->
+    <div class="card score-card" id="scoreCard">
+      <div class="score-hero">
+        <div class="big-score" id="bigScore">--</div>
+        <div>
+          <div class="score-label" id="scoreLabel">Investment Score</div>
+          <div class="score-verdict" id="scoreVerdict">Analyzing...</div>
+          <div class="risk-pill" id="riskPill">Risk: --</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metrics Grid -->
+    <div class="metrics-grid" id="metricsGrid"></div>
+
+    <!-- Projection Chart -->
+    <div class="card">
+      <div class="card-header"><h3 class="card-title"><i class="bi bi-graph-up-arrow gold"></i> 10-Year Value Projection</h3></div>
+      <div class="card-body"><canvas id="projectionChart" height="160"></canvas></div>
+    </div>
+
+    <!-- Recommendations -->
+    <div class="card" id="recsCard">
+      <div class="card-header"><h3 class="card-title"><i class="bi bi-lightbulb-fill gold"></i> AI Recommendations</h3></div>
+      <div class="card-body" id="recsBody"></div>
+    </div>
+
+    <!-- Community Insight -->
+    <div class="card" id="commCard">
+      <div class="card-header"><h3 class="card-title"><i class="bi bi-map-fill gold"></i> Community Intelligence</h3></div>
+      <div class="card-body" id="commBody"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Loading overlay -->
+<div id="analyzerLoader" class="loader-overlay" style="display:none">
+  <div class="loader-box">
+    <div class="spinner"></div>
+    <p>Running AI analysis...</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let projChart = null;
+
+async function analyzeProperty(e) {
+  e.preventDefault();
+  const btn = document.getElementById('analyzeBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Analyzing...';
+  document.getElementById('analyzerLoader').style.display = 'flex';
+
+  const payload = {
+    property_name:   document.getElementById('property_name').value,
+    community:       document.getElementById('community').value,
+    property_type:   document.getElementById('property_type').value,
+    bedrooms:        document.getElementById('bedrooms').value,
+    bathrooms:       document.getElementById('bathrooms').value,
+    area_sqft:       parseFloat(document.getElementById('area_sqft').value) || 0,
+    purchase_price:  parseFloat(document.getElementById('purchase_price').value) || 0,
+    annual_rent:     parseFloat(document.getElementById('annual_rent').value) || 0,
+    service_charges: parseFloat(document.getElementById('service_charges').value) || 0,
+    vacancy:         parseFloat(document.getElementById('vacancy').value) || 5,
+  };
+
+  try {
+    const res  = await fetch('/api/analyze-property', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (json.success) {
+      renderResults(json.data);
+    } else {
+      showToast(json.error || 'Analysis failed', 'error');
+    }
+  } catch(err) {
+    showToast('Network error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-cpu-fill"></i> Run AI Analysis';
+    document.getElementById('analyzerLoader').style.display = 'none';
+  }
+}
+
+function renderResults(d) {
+  document.getElementById('resultsPanel').style.display = 'block';
+  document.getElementById('resultsPanel').scrollIntoView({behavior:'smooth'});
+
+  // Score
+  const score = d.investment_score;
+  document.getElementById('bigScore').textContent = score;
+  const verdicts = score >= 80 ? ['EXCELLENT','score-excellent'] : score >= 65 ? ['GOOD','score-good'] : score >= 50 ? ['AVERAGE','score-avg'] : ['BELOW AVG','score-low'];
+  document.getElementById('scoreVerdict').textContent = verdicts[0];
+  document.getElementById('scoreCard').className = 'card score-card ' + verdicts[1];
+  document.getElementById('riskPill').textContent = 'Risk: ' + d.risk_level;
+  document.getElementById('scoreLabel').textContent = `Investment Score — ${d.property_name}`;
+
+  // Metrics
+  const metrics = [
+    {icon:'bi-percent',       label:'Gross Rental Yield', val: d.gross_yield + '%',         cls:'green'},
+    {icon:'bi-graph-up',      label:'Net Rental Yield',   val: d.net_yield + '%',            cls:'green'},
+    {icon:'bi-bar-chart-fill',label:'Total ROI',           val: d.roi + '%',                  cls:'blue'},
+    {icon:'bi-cash-coin',     label:'Monthly Cash Flow',   val: 'AED ' + fmtNum(d.monthly_cash_flow), cls: d.monthly_cash_flow >= 0 ? 'green' : 'red'},
+    {icon:'bi-arrows-angle-expand',label:'Price / Sq Ft',  val: 'AED ' + fmtNum(d.price_per_sqft),   cls:''},
+    {icon:'bi-rocket-fill',   label:'Growth Rate',         val: d.growth_rate + '% p.a.',    cls:'purple'},
+    {icon:'bi-calendar-check',label:'Value in 5 Years',    val: 'AED ' + fmtNum(d.fv_5yr),   cls:'gold'},
+    {icon:'bi-bank',          label:'Capital Gain (5 yr)', val: 'AED ' + fmtNum(d.gain_5yr), cls:'gold'},
+  ];
+  document.getElementById('metricsGrid').innerHTML = metrics.map(m => `
+    <div class="metric-card">
+      <div class="metric-icon ${m.cls}"><i class="bi ${m.icon}"></i></div>
+      <div class="metric-val ${m.cls}">${m.val}</div>
+      <div class="metric-lbl">${m.label}</div>
+    </div>`).join('');
+
+  // Projection chart
+  const yrs   = [0,1,2,3,4,5,6,7,8,9,10];
+  const price  = d.purchase_price;
+  const gr     = d.growth_rate / 100;
+  const projData = yrs.map(y => Math.round(price * Math.pow(1 + gr, y)));
+  if (projChart) projChart.destroy();
+  projChart = new Chart(document.getElementById('projectionChart'), {
+    type: 'line',
+    data: {
+      labels: yrs.map(y => y === 0 ? 'Now' : `Yr ${y}`),
+      datasets: [{
+        label: 'Projected Value (AED)',
+        data: projData,
+        fill: true,
+        backgroundColor: 'rgba(212,168,67,.15)',
+        borderColor: '#d4a843',
+        borderWidth: 2,
+        pointBackgroundColor: '#d4a843',
+        tension: 0.4
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {legend:{display:false}},
+      scales: {
+        y: { ticks: { callback: v => 'AED ' + fmtNum(v), color:'#8892a2' }, grid:{color:'rgba(255,255,255,.05)'} },
+        x: { ticks: { color:'#8892a2' }, grid:{display:false} }
+      }
+    }
+  });
+
+  // Recommendations
+  document.getElementById('recsBody').innerHTML = (d.recommendations||[]).map(r =>
+    `<div class="rec-item"><i class="bi bi-check-circle-fill gold"></i> ${r}</div>`
+  ).join('');
+
+  // Community insights
+  document.getElementById('commBody').innerHTML = (d.community_insight||[]).map(r =>
+    `<div class="rec-item"><i class="bi bi-info-circle-fill blue"></i> ${r}</div>`
+  ).join('');
+}
+</script>
+{% endblock %}

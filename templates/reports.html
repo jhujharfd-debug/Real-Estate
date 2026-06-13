@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block title %}Reports — Dubai RE Intelligence{% endblock %}
+{% block page_title %}Reports & Downloads{% endblock %}
+
+{% block content %}
+<div class="page-intro">
+  <i class="bi bi-file-earmark-bar-graph-fill gold"></i>
+  <div>
+    <h2>Reports & Exports</h2>
+    <p class="muted">Generate downloadable investment reports: market overviews, community analyses, and executive summaries.</p>
+  </div>
+</div>
+
+<!-- Report Generator -->
+<div class="two-col">
+
+  <!-- Generator Form -->
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title"><i class="bi bi-gear-fill gold"></i> Generate Report</h3>
+    </div>
+    <div class="card-body">
+      <div class="form-group">
+        <label>Report Type</label>
+        <select id="report_type" class="form-input" onchange="toggleCommunitySelect()">
+          <option value="market_overview">Dubai Market Overview Report</option>
+          <option value="community">Community Investment Report</option>
+          <option value="executive_summary">Executive Summary Report</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="communitySelect" style="display:none">
+        <label>Select Community</label>
+        <select id="report_community" class="form-input">
+          <option value="">Select...</option>
+          {% for c in communities %}
+          <option value="{{ c }}">{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="report-type-desc" id="typeDesc">
+        <i class="bi bi-info-circle blue"></i>
+        Comprehensive market analysis covering all 9 Dubai communities: growth rates, yield rankings, investor intelligence, buyer/seller insights, emerging opportunities, and risk alerts.
+      </div>
+
+      <button class="btn btn-gold btn-full" onclick="generateReport()" id="reportBtn">
+        <i class="bi bi-file-earmark-plus-fill"></i> Generate Report
+      </button>
+
+      <!-- Generated Report Preview -->
+      <div id="reportPreview" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- CSV Data Upload -->
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title"><i class="bi bi-upload gold"></i> Upload Property Data (CSV)</h3>
+    </div>
+    <div class="card-body">
+      <p class="muted" style="margin-bottom:1rem">
+        Import property listings, market data, or transaction records. Auto-detects column names.
+      </p>
+
+      <div class="form-group">
+        <label>Data Type</label>
+        <select id="csv_data_type" class="form-input">
+          <option value="properties">Property Listings</option>
+          <option value="leads">Lead Data</option>
+        </select>
+      </div>
+
+      <div class="upload-zone" id="propUploadZone" onclick="document.getElementById('propFile').click()">
+        <i class="bi bi-cloud-upload"></i>
+        <p>Click or drop CSV file here</p>
+        <small class="muted">Max 16 MB · CSV format only</small>
+      </div>
+      <input type="file" id="propFile" accept=".csv" style="display:none" onchange="uploadPropertyCSV()" />
+
+      <div id="propUploadResult" style="display:none"></div>
+
+      <div class="section-divider">Sample CSV Templates</div>
+      <div class="template-downloads">
+        <button class="btn btn-outline btn-sm" onclick="downloadTemplate('properties')">
+          <i class="bi bi-download"></i> Properties Template
+        </button>
+        <button class="btn btn-outline btn-sm" onclick="downloadTemplate('leads')">
+          <i class="bi bi-download"></i> Leads Template
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Saved Reports -->
+<div class="card">
+  <div class="card-header">
+    <h3 class="card-title"><i class="bi bi-folder-fill gold"></i> Saved Reports</h3>
+    <span class="muted" style="font-size:.85rem">{{ reports|length }} report(s) saved</span>
+  </div>
+  <div class="card-body">
+    {% if reports %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Report Name</th>
+          <th>Type</th>
+          <th>Generated</th>
+          <th>Download</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in reports %}
+        <tr>
+          <td class="muted">{{ r.id }}</td>
+          <td><strong>{{ r.report_name }}</strong></td>
+          <td>
+            <span class="badge {% if r.report_type == 'market_overview' %}badge-blue{% elif r.report_type == 'community' %}badge-green{% else %}badge-gold{% endif %}">
+              {{ r.report_type.replace('_',' ').title() }}
+            </span>
+          </td>
+          <td class="muted">{{ r.generated_date[:16] }}</td>
+          <td>
+            <a href="/api/download-report/{{ r.id }}" class="btn btn-sm btn-outline" download>
+              <i class="bi bi-download"></i> Download
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-folder2-open"></i>
+      <p>No reports generated yet.<br>Use the form above to create your first report.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Loader -->
+<div id="reportLoader" class="loader-overlay" style="display:none">
+  <div class="loader-box"><div class="spinner"></div><p>Generating report...</p></div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const typeDescs = {
+  market_overview:   "Comprehensive market analysis covering all 9 Dubai communities: growth rates, yield rankings, investor intelligence, buyer/seller insights, emerging opportunities, and risk alerts.",
+  community:         "Deep-dive analysis for a single community: metrics, investment score, strengths, risks, and AI insights. Select a community above.",
+  executive_summary: "High-level executive summary with top 5 investment communities, market overview, and strategic recommendations — ideal for board presentations."
+};
+
+function toggleCommunitySelect() {
+  const type = document.getElementById('report_type').value;
+  document.getElementById('communitySelect').style.display = type === 'community' ? 'block' : 'none';
+  document.getElementById('typeDesc').innerHTML =
+    `<i class="bi bi-info-circle blue"></i> ${typeDescs[type] || ''}`;
+}
+
+async function generateReport() {
+  const type  = document.getElementById('report_type').value;
+  const comm  = document.getElementById('report_community').value;
+  if (type === 'community' && !comm) { showToast('Please select a community', 'warn'); return; }
+
+  const btn = document.getElementById('reportBtn');
+  btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Generating...';
+  document.getElementById('reportLoader').style.display = 'flex';
+
+  try {
+    const res  = await fetch('/api/generate-report', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({report_type: type, community: comm})
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast('Report generated!', 'success');
+      // Show preview
+      document.getElementById('reportPreview').style.display = 'block';
+      document.getElementById('reportPreview').innerHTML = `
+        <div class="report-success">
+          <i class="bi bi-check-circle-fill green"></i>
+          <div>
+            <strong>${json.report_name}</strong><br>
+            <a href="/api/download-report/${json.report_id}" class="btn btn-gold btn-sm" download style="margin-top:.5rem">
+              <i class="bi bi-download"></i> Download Report
+            </a>
+            <button class="btn btn-outline btn-sm" onclick="location.reload()" style="margin-top:.5rem">
+              <i class="bi bi-arrow-clockwise"></i> Refresh List
+            </button>
+          </div>
+        </div>`;
+    } else {
+      showToast(json.error, 'error');
+    }
+  } catch(e) { showToast('Error: '+e.message,'error'); }
+  finally {
+    btn.disabled = false; btn.innerHTML = '<i class="bi bi-file-earmark-plus-fill"></i> Generate Report';
+    document.getElementById('reportLoader').style.display = 'none';
+  }
+}
+
+async function uploadPropertyCSV() {
+  const file   = document.getElementById('propFile').files[0];
+  const dtype  = document.getElementById('csv_data_type').value;
+  if (!file) return;
+
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('data_type', dtype);
+  showToast('Uploading...', 'info');
+
+  try {
+    const res  = await fetch('/api/upload-csv', {method:'POST', body:fd});
+    const json = await res.json();
+    document.getElementById('propUploadResult').style.display = 'block';
+    if (json.success) {
+      document.getElementById('propUploadResult').innerHTML = `
+        <div class="upload-success">
+          <i class="bi bi-check-circle-fill green"></i>
+          Imported <strong>${json.imported}</strong> / <strong>${json.total}</strong> rows.
+          ${json.errors.length ? `<br><small class="muted">${json.errors.length} row(s) skipped due to errors.</small>` : ''}
+          ${json.preview.length ? `<details style="margin-top:.75rem"><summary>Preview first ${json.preview.length} rows</summary><pre style="font-size:.78rem;overflow-x:auto">${JSON.stringify(json.preview, null, 2)}</pre></details>` : ''}
+        </div>`;
+    } else {
+      document.getElementById('propUploadResult').innerHTML =
+        `<div class="upload-error"><i class="bi bi-x-circle-fill red"></i> ${json.error}</div>`;
+    }
+  } catch(e) { showToast('Upload error: '+e.message,'error'); }
+}
+
+function downloadTemplate(type) {
+  let content, name;
+  if (type === 'properties') {
+    content = 'property_name,community,type,price,area,bedrooms,bathrooms,annual_rent,service_charges,status\n'
+            + 'Marina Heights 2BR,Dubai Marina,Apartment,1850000,950,2,2,115000,18000,Ready\n'
+            + 'Downtown Studio,Downtown Dubai,Studio,950000,520,0,1,72000,10000,Ready\n';
+    name = 'dubai_properties_template.csv';
+  } else {
+    content = 'name,email,phone,lead_type,budget,preferred_area,notes\n'
+            + 'Ahmed Al Mansoori,ahmed@example.com,+97150123456,Investor,5000000,Downtown Dubai,Portfolio investor\n'
+            + 'Sarah Johnson,sarah@example.com,+97150987654,Buyer,2500000,Dubai Hills Estate,Family home\n';
+    name = 'dubai_leads_template.csv';
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], {type:'text/csv'}));
+  a.download = name; a.click();
+}
+
+// Drag-drop for property upload
+const zone = document.getElementById('propUploadZone');
+zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+  e.preventDefault(); zone.classList.remove('drag-over');
+  document.getElementById('propFile').files = e.dataTransfer.files;
+  uploadPropertyCSV();
+});
+</script>
+{% endblock %}

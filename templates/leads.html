@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+{% block title %}Lead Management — Dubai RE Intelligence{% endblock %}
+{% block page_title %}Lead Management{% endblock %}
+
+{% block content %}
+<div class="page-intro">
+  <i class="bi bi-people-fill gold"></i>
+  <div>
+    <h2>Lead Management System</h2>
+    <p class="muted">Capture, score, track, and manage buyer, seller, and investor leads. Auto-scoring based on budget and contact completeness.</p>
+  </div>
+</div>
+
+<!-- Action Bar -->
+<div class="action-bar">
+  <div class="search-box">
+    <i class="bi bi-search"></i>
+    <input type="text" id="leadSearch" placeholder="Search by name, email, area..." oninput="searchLeads()" />
+  </div>
+  <div class="filter-btns">
+    <button class="filter-btn active" data-type="" onclick="filterLeads(this,'')">All</button>
+    <button class="filter-btn" data-type="Investor" onclick="filterLeads(this,'Investor')">Investors</button>
+    <button class="filter-btn" data-type="Buyer"    onclick="filterLeads(this,'Buyer')">Buyers</button>
+    <button class="filter-btn" data-type="Seller"   onclick="filterLeads(this,'Seller')">Sellers</button>
+  </div>
+  <button class="btn btn-gold" onclick="openAddModal()">
+    <i class="bi bi-person-plus-fill"></i> Add Lead
+  </button>
+</div>
+
+<!-- Stats -->
+<div id="leadStats" class="lead-stats-bar"></div>
+
+<!-- Leads Table -->
+<div class="card">
+  <div class="card-body table-scroll">
+    <table class="data-table leads-table" id="leadsTable">
+      <thead>
+        <tr>
+          <th>Score</th>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Budget</th>
+          <th>Preferred Area</th>
+          <th>Contact</th>
+          <th>Status</th>
+          <th>Added</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="leadsBody">
+        <tr><td colspan="9" class="loading-row"><div class="spinner small"></div> Loading leads...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Upload CSV -->
+<div class="card">
+  <div class="card-header">
+    <h3 class="card-title"><i class="bi bi-upload gold"></i> Import Leads from CSV</h3>
+  </div>
+  <div class="card-body">
+    <p class="muted" style="margin-bottom:1rem">CSV columns: name, email, phone, lead_type, budget, preferred_area, notes</p>
+    <div class="upload-zone" id="leadUploadZone" onclick="document.getElementById('leadFile').click()">
+      <i class="bi bi-file-earmark-spreadsheet"></i>
+      <p>Click to select CSV file or drag and drop</p>
+    </div>
+    <input type="file" id="leadFile" accept=".csv" style="display:none" onchange="uploadLeadsCSV()" />
+    <div id="uploadResult" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ══ ADD / EDIT MODAL ══════════════════════════════════════════════════════ -->
+<div id="leadModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="modalTitle">Add New Lead</h3>
+      <button class="modal-close" onclick="closeModal()"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editLeadId" />
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Full Name *</label>
+          <input type="text" id="lead_name" class="form-input" placeholder="Ahmed Al Mansoori" />
+        </div>
+        <div class="form-group">
+          <label>Lead Type</label>
+          <select id="lead_type" class="form-input">
+            <option>Buyer</option>
+            <option>Investor</option>
+            <option>Seller</option>
+            <option>Tenant</option>
+            <option>Developer</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="lead_email" class="form-input" placeholder="email@example.com" />
+        </div>
+        <div class="form-group">
+          <label>Phone</label>
+          <input type="text" id="lead_phone" class="form-input" placeholder="+971 50 123 4567" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Budget (AED)</label>
+          <input type="number" id="lead_budget" class="form-input" placeholder="2000000" />
+        </div>
+        <div class="form-group">
+          <label>Preferred Area</label>
+          <select id="lead_area" class="form-input">
+            <option value="">Any</option>
+            {% for c in communities %}
+            <option value="{{ c }}">{{ c }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Status</label>
+          <select id="lead_status" class="form-input">
+            <option>New</option>
+            <option>Warm</option>
+            <option>Hot</option>
+            <option>Active</option>
+            <option>Closed</option>
+            <option>Lost</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Notes</label>
+        <textarea id="lead_notes" class="form-input" rows="3"
+                  placeholder="Additional details, requirements, timeline..."></textarea>
+      </div>
+
+      <div class="modal-score-preview" id="scorePreview">
+        Lead score will be calculated automatically based on budget and contact info.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-gold" onclick="saveLead()" id="saveLeadBtn">
+        <i class="bi bi-check-lg"></i> Save Lead
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentType = '';
+
+// ── Load Leads ─────────────────────────────────────────────────────────────
+async function loadLeads(search='', type='') {
+  const params = new URLSearchParams();
+  if (search) params.set('q', search);
+  if (type)   params.set('type', type);
+
+  const res  = await fetch('/api/leads?' + params);
+  const json = await res.json();
+  if (!json.success) return;
+
+  renderLeads(json.data);
+  renderStats(json.data);
+}
+
+function renderStats(leads) {
+  const investors = leads.filter(l => l.lead_type === 'Investor').length;
+  const buyers    = leads.filter(l => l.lead_type === 'Buyer').length;
+  const hot       = leads.filter(l => l.status === 'Hot').length;
+  const totalBudget = leads.reduce((s, l) => s + (l.budget || 0), 0);
+
+  document.getElementById('leadStats').innerHTML = `
+    <div class="lead-stat"><div class="ls-val">${leads.length}</div><div class="ls-lbl">Total Leads</div></div>
+    <div class="lead-stat"><div class="ls-val gold">${investors}</div><div class="ls-lbl">Investors</div></div>
+    <div class="lead-stat"><div class="ls-val blue">${buyers}</div><div class="ls-lbl">Buyers</div></div>
+    <div class="lead-stat"><div class="ls-val red">${hot}</div><div class="ls-lbl">Hot Leads</div></div>
+    <div class="lead-stat"><div class="ls-val green">AED ${fmtNum(totalBudget)}</div><div class="ls-lbl">Total Pipeline Budget</div></div>`;
+}
+
+function renderLeads(leads) {
+  if (!leads.length) {
+    document.getElementById('leadsBody').innerHTML =
+      '<tr><td colspan="9" class="empty-row"><i class="bi bi-inbox"></i> No leads found</td></tr>';
+    return;
+  }
+
+  document.getElementById('leadsBody').innerHTML = leads.map(l => `
+    <tr>
+      <td><div class="score-bar-cell"><div class="score-bar-fill" style="width:${l.score}%"></div><span>${l.score}</span></div></td>
+      <td><div class="lead-name">${escHtml(l.name)}</div></td>
+      <td><span class="badge ${l.lead_type==='Investor'?'badge-gold':l.lead_type==='Buyer'?'badge-blue':'badge-muted'}">${l.lead_type}</span></td>
+      <td>${l.budget ? 'AED ' + fmtNum(l.budget) : '—'}</td>
+      <td>${escHtml(l.preferred_area || '—')}</td>
+      <td>
+        ${l.email ? `<a href="mailto:${escHtml(l.email)}" class="contact-link"><i class="bi bi-envelope"></i></a>` : ''}
+        ${l.phone ? `<a href="tel:${escHtml(l.phone)}"  class="contact-link"><i class="bi bi-telephone"></i></a>` : ''}
+      </td>
+      <td><span class="status-pill status-${(l.status||'new').toLowerCase()}">${l.status || 'New'}</span></td>
+      <td class="muted">${fmtDate(l.created_at)}</td>
+      <td>
+        <button class="icon-btn" onclick="editLead(${l.id})" title="Edit"><i class="bi bi-pencil-fill"></i></button>
+        <button class="icon-btn red" onclick="deleteLead(${l.id}, '${escHtml(l.name)}')" title="Delete"><i class="bi bi-trash-fill"></i></button>
+      </td>
+    </tr>`).join('');
+}
+
+// ── Search & Filter ────────────────────────────────────────────────────────
+function searchLeads() {
+  loadLeads(document.getElementById('leadSearch').value, currentType);
+}
+
+function filterLeads(btn, type) {
+  currentType = type;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadLeads(document.getElementById('leadSearch').value, type);
+}
+
+// ── Modal ──────────────────────────────────────────────────────────────────
+function openAddModal() {
+  document.getElementById('modalTitle').textContent = 'Add New Lead';
+  document.getElementById('editLeadId').value = '';
+  ['lead_name','lead_email','lead_phone','lead_budget','lead_notes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('lead_type').value   = 'Buyer';
+  document.getElementById('lead_area').value   = '';
+  document.getElementById('lead_status').value = 'New';
+  document.getElementById('leadModal').style.display = 'flex';
+}
+
+async function editLead(id) {
+  const res  = await fetch('/api/leads/' + id);
+  const json = await res.json();
+  if (!json.success) return;
+  const l = json.data;
+
+  document.getElementById('modalTitle').textContent = 'Edit Lead';
+  document.getElementById('editLeadId').value    = l.id;
+  document.getElementById('lead_name').value     = l.name;
+  document.getElementById('lead_email').value    = l.email || '';
+  document.getElementById('lead_phone').value    = l.phone || '';
+  document.getElementById('lead_budget').value   = l.budget || '';
+  document.getElementById('lead_notes').value    = l.notes || '';
+  document.getElementById('lead_type').value     = l.lead_type;
+  document.getElementById('lead_area').value     = l.preferred_area || '';
+  document.getElementById('lead_status').value   = l.status || 'New';
+  document.getElementById('scorePreview').textContent = `Current lead score: ${l.score}/100`;
+  document.getElementById('leadModal').style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('leadModal').style.display = 'none';
+}
+
+async function saveLead() {
+  const name = document.getElementById('lead_name').value.trim();
+  if (!name) { showToast('Name is required', 'warn'); return; }
+
+  const id = document.getElementById('editLeadId').value;
+  const payload = {
+    name,
+    email:          document.getElementById('lead_email').value,
+    phone:          document.getElementById('lead_phone').value,
+    lead_type:      document.getElementById('lead_type').value,
+    budget:         parseFloat(document.getElementById('lead_budget').value) || 0,
+    preferred_area: document.getElementById('lead_area').value,
+    notes:          document.getElementById('lead_notes').value,
+    status:         document.getElementById('lead_status').value,
+  };
+
+  const method = id ? 'PUT' : 'POST';
+  const url    = id ? `/api/leads/${id}` : '/api/leads';
+
+  try {
+    const res  = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    const json = await res.json();
+    if (json.success) {
+      showToast(id ? 'Lead updated!' : `Lead added! Score: ${json.score}/100`, 'success');
+      closeModal();
+      loadLeads(document.getElementById('leadSearch').value, currentType);
+    } else {
+      showToast(json.error, 'error');
+    }
+  } catch(e) { showToast('Error: '+e.message,'error'); }
+}
+
+async function deleteLead(id, name) {
+  if (!confirm(`Delete lead "${name}"? This cannot be undone.`)) return;
+  const res  = await fetch('/api/leads/'+id, {method:'DELETE'});
+  const json = await res.json();
+  if (json.success) {
+    showToast('Lead deleted', 'success');
+    loadLeads(document.getElementById('leadSearch').value, currentType);
+  }
+}
+
+// ── CSV Upload ─────────────────────────────────────────────────────────────
+async function uploadLeadsCSV() {
+  const file = document.getElementById('leadFile').files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('data_type', 'leads');
+
+  document.getElementById('uploadResult').style.display = 'none';
+  showToast('Importing leads...', 'info');
+
+  try {
+    const res  = await fetch('/api/upload-csv', {method:'POST', body:fd});
+    const json = await res.json();
+    if (json.success) {
+      document.getElementById('uploadResult').style.display = 'block';
+      document.getElementById('uploadResult').innerHTML = `
+        <div class="upload-success">
+          <i class="bi bi-check-circle-fill green"></i>
+          Imported <strong>${json.imported}</strong> of <strong>${json.total}</strong> leads successfully.
+          ${json.errors.length ? `<br><small class="red">${json.errors.length} errors skipped.</small>` : ''}
+        </div>`;
+      loadLeads();
+    } else {
+      showToast(json.error, 'error');
+    }
+  } catch(e) { showToast('Upload error: '+e.message,'error'); }
+}
+
+// Helpers
+function fmtDate(dt) {
+  if (!dt) return '—';
+  return new Date(dt).toLocaleDateString('en-AE',{year:'numeric',month:'short',day:'numeric'});
+}
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Drag-and-drop upload zone
+const zone = document.getElementById('leadUploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+  e.preventDefault(); zone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    document.getElementById('leadFile').files = e.dataTransfer.files;
+    uploadLeadsCSV();
+  }
+});
+
+// Load on mount
+loadLeads();
+</script>
+{% endblock %}

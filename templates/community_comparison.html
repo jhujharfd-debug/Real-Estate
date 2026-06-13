@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block title %}Community Comparison — Dubai RE Intelligence{% endblock %}
+{% block page_title %}Community Comparison Engine{% endblock %}
+
+{% block content %}
+<div class="page-intro">
+  <i class="bi bi-bar-chart-fill gold"></i>
+  <div>
+    <h2>Community Comparison Engine</h2>
+    <p class="muted">Select 2–9 Dubai communities to compare side-by-side across price, yield, growth, risk, and investment attractiveness.</p>
+  </div>
+</div>
+
+<!-- Community Selector -->
+<div class="card">
+  <div class="card-header">
+    <h3 class="card-title"><i class="bi bi-map-fill gold"></i> Select Communities to Compare</h3>
+    <div class="header-actions">
+      <button class="btn btn-sm btn-outline" onclick="selectAll()">Select All</button>
+      <button class="btn btn-sm btn-outline" onclick="clearAll()">Clear</button>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="community-selector">
+      {% for name, data in communities.items() %}
+      <label class="comm-check-card">
+        <input type="checkbox" name="community" value="{{ name }}" class="comm-checkbox" checked />
+        <div class="check-content">
+          <div class="check-emoji">{{ data.emoji }}</div>
+          <div class="check-name">{{ name }}</div>
+          <div class="check-stats">
+            <span class="green">{{ data.rental_yield }}% yield</span>
+            <span class="blue">{{ data.growth_rate }}% growth</span>
+          </div>
+        </div>
+      </label>
+      {% endfor %}
+    </div>
+    <button class="btn btn-gold" onclick="compareSelected()" style="margin-top:1rem">
+      <i class="bi bi-bar-chart-fill"></i> Compare Selected
+    </button>
+  </div>
+</div>
+
+<!-- Results -->
+<div id="compareResults" style="display:none">
+
+  <!-- Ranking Cards -->
+  <div id="rankingCards" class="ranking-grid"></div>
+
+  <!-- Comparison Table -->
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title"><i class="bi bi-table gold"></i> Detailed Comparison</h3>
+    </div>
+    <div class="card-body table-scroll">
+      <table class="data-table compare-table" id="compareTable">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th id="th-placeholder" colspan="9">—</th>
+          </tr>
+        </thead>
+        <tbody id="compareBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="two-col">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title"><i class="bi bi-percent gold"></i> Rental Yield Comparison</h3></div>
+      <div class="card-body"><canvas id="yieldChart" height="220"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3 class="card-title"><i class="bi bi-graph-up-arrow gold"></i> Price Growth Rate</h3></div>
+      <div class="card-body"><canvas id="growthChart" height="220"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Investment Score Chart -->
+  <div class="card">
+    <div class="card-header"><h3 class="card-title"><i class="bi bi-trophy-fill gold"></i> Investment Score Radar</h3></div>
+    <div class="card-body"><canvas id="scoreChart" height="160"></canvas></div>
+  </div>
+
+  <!-- Community Insights -->
+  <div id="insightGrid" class="insight-grid"></div>
+</div>
+
+<!-- Loader -->
+<div id="compareLoader" class="loader-overlay" style="display:none">
+  <div class="loader-box"><div class="spinner"></div><p>Comparing communities...</p></div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let yieldCht = null, growthCht = null, scoreCht = null;
+
+function selectAll() {
+  document.querySelectorAll('.comm-checkbox').forEach(c => c.checked = true);
+}
+function clearAll() {
+  document.querySelectorAll('.comm-checkbox').forEach(c => c.checked = false);
+}
+
+async function compareSelected() {
+  const selected = [...document.querySelectorAll('.comm-checkbox:checked')].map(c => c.value);
+  if (selected.length < 2) { showToast('Please select at least 2 communities', 'warn'); return; }
+
+  document.getElementById('compareLoader').style.display = 'flex';
+
+  try {
+    const res  = await fetch('/api/compare-communities', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({communities: selected})
+    });
+    const json = await res.json();
+    if (json.success) renderComparison(json.data);
+    else showToast(json.error, 'error');
+  } catch(err) {
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    document.getElementById('compareLoader').style.display = 'none';
+  }
+}
+
+function renderComparison(data) {
+  document.getElementById('compareResults').style.display = 'block';
+  document.getElementById('compareResults').scrollIntoView({behavior:'smooth'});
+
+  const colors = ['#d4a843','#3b82f6','#10b981','#8b5cf6','#ef4444','#f97316','#06b6d4','#84cc16','#ec4899'];
+
+  // Ranking cards
+  document.getElementById('rankingCards').innerHTML = data.map((c, i) => `
+    <div class="rank-card">
+      <div class="rank-num rank-${i+1}">#${i+1}</div>
+      <div class="rank-name">${c.name}</div>
+      <div class="rank-score">${c.investment_score}/100</div>
+      <div class="rank-type muted">${c.type}</div>
+      <div class="rank-stats">
+        <span class="green">Yield: ${c.rental_yield}%</span>
+        <span class="blue">Growth: ${c.growth_rate}%</span>
+        <span class="risk-tag risk-${c.risk.replace(/[^a-z]/gi,'')}">${c.risk}</span>
+      </div>
+    </div>`).join('');
+
+  // Comparison table
+  const names   = data.map(c => c.name);
+  const metrics = [
+    ['Investment Score',   data.map(c => c.investment_score + '/100')],
+    ['Avg Price / Sq Ft',  data.map(c => 'AED ' + fmtNum(c.avg_price_sqft))],
+    ['Avg Annual Rent',    data.map(c => 'AED ' + fmtNum(c.avg_annual_rent))],
+    ['Gross Rental Yield', data.map(c => c.rental_yield + '%')],
+    ['Annual Growth Rate', data.map(c => c.growth_rate + '%')],
+    ['Risk Level',         data.map(c => c.risk)],
+    ['Property Type',      data.map(c => c.type)],
+    ['Min Price',          data.map(c => 'AED ' + fmtNum(c.min_price))],
+    ['Max Price',          data.map(c => 'AED ' + fmtNum(c.max_price))],
+    ['Best For',           data.map(c => c.best_for)],
+    ['Popular Units',      data.map(c => c.popular_units)],
+  ];
+  // Header
+  document.getElementById('th-placeholder').outerHTML =
+    names.map(n => `<th>${n.replace('Jumeirah Village Circle (JVC)','JVC')}</th>`).join('');
+
+  document.getElementById('compareBody').innerHTML = metrics.map(([label, vals]) => `
+    <tr>
+      <td class="metric-col">${label}</td>
+      ${vals.map(v => `<td>${v}</td>`).join('')}
+    </tr>`).join('');
+
+  // Yield chart
+  if (yieldCht) yieldCht.destroy();
+  yieldCht = new Chart(document.getElementById('yieldChart'), {
+    type: 'bar',
+    data: {
+      labels: data.map(c => shortName(c.name)),
+      datasets: [{
+        label: 'Rental Yield %',
+        data: data.map(c => c.rental_yield),
+        backgroundColor: colors.slice(0, data.length),
+        borderRadius: 6
+      }]
+    },
+    options: chartOpts('Yield (%)')
+  });
+
+  // Growth chart
+  if (growthCht) growthCht.destroy();
+  growthCht = new Chart(document.getElementById('growthChart'), {
+    type: 'bar',
+    data: {
+      labels: data.map(c => shortName(c.name)),
+      datasets: [{
+        label: 'Growth Rate %',
+        data: data.map(c => c.growth_rate),
+        backgroundColor: colors.slice(0, data.length).map(c => c + 'cc'),
+        borderRadius: 6
+      }]
+    },
+    options: chartOpts('Growth (%)')
+  });
+
+  // Score horizontal bar
+  if (scoreCht) scoreCht.destroy();
+  scoreCht = new Chart(document.getElementById('scoreChart'), {
+    type: 'bar',
+    data: {
+      labels: data.map(c => shortName(c.name)),
+      datasets: [{
+        label: 'Investment Score',
+        data: data.map(c => c.investment_score),
+        backgroundColor: data.map((_, i) => colors[i % colors.length]),
+        borderRadius: 6
+      }]
+    },
+    options: { ...chartOpts('Score'), indexAxis: 'y' }
+  });
+
+  // Insights
+  document.getElementById('insightGrid').innerHTML = data.map((c, i) => `
+    <div class="card insight-card" style="border-left:3px solid ${colors[i]}">
+      <div class="card-header"><h4 class="card-title">${c.name}</h4></div>
+      <div class="card-body">
+        ${(c.insights||[]).map(ins => `<div class="rec-item"><i class="bi bi-dot"></i>${ins}</div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function shortName(n) {
+  const m = {'Jumeirah Village Circle (JVC)':'JVC','Dubai Hills Estate':'D. Hills','Arabian Ranches':'Ar. Ranches','Dubai Creek Harbour':'Creek Harbour'};
+  return m[n] || n;
+}
+
+function chartOpts(yLabel) {
+  return {
+    responsive: true,
+    plugins: {legend:{display:false}},
+    scales: {
+      y: { ticks:{color:'#8892a2', callback: v => v + (yLabel.includes('%') ? '%' : '')}, grid:{color:'rgba(255,255,255,.05)'} },
+      x: { ticks:{color:'#8892a2'}, grid:{display:false} }
+    }
+  };
+}
+</script>
+{% endblock %}

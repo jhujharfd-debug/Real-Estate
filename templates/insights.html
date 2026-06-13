@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% block title %}AI Market Insights — Dubai RE Intelligence{% endblock %}
+{% block page_title %}AI Market Intelligence{% endblock %}
+
+{% block content %}
+<div class="page-intro">
+  <i class="bi bi-lightbulb-fill gold"></i>
+  <div>
+    <h2>AI Market Intelligence Engine</h2>
+    <p class="muted">Generate comprehensive Dubai real estate market insights: growth analysis, yield rankings, buyer/seller/investor intelligence, emerging opportunities, and risk alerts.</p>
+  </div>
+</div>
+
+<div class="center-action">
+  <button class="btn btn-gold btn-lg" onclick="generateInsights()" id="insightBtn">
+    <i class="bi bi-cpu-fill"></i> Generate Full Market Intelligence Report
+  </button>
+</div>
+
+<!-- Results -->
+<div id="insightResults" style="display:none">
+
+  <!-- Generated timestamp -->
+  <div class="generated-stamp" id="generatedAt"></div>
+
+  <!-- AI Executive Summary (if OpenAI connected) -->
+  <div id="aiSummaryBox" style="display:none" class="card ai-summary-card">
+    <div class="card-header">
+      <h3 class="card-title"><i class="bi bi-robot gold"></i> AI Executive Summary <span class="badge badge-gold">OpenAI Enhanced</span></h3>
+    </div>
+    <div class="card-body" id="aiSummaryBody"></div>
+  </div>
+
+  <!-- Market Overview -->
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title"><i class="bi bi-globe gold"></i> Dubai Market Overview</h3>
+    </div>
+    <div class="card-body">
+      <p id="marketSummary" class="market-summary-text"></p>
+      <div class="kpi-grid" id="marketKpis"></div>
+    </div>
+  </div>
+
+  <!-- Three Column Intelligence -->
+  <div class="three-col-grid">
+
+    <!-- Top Growth -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title"><i class="bi bi-rocket-fill green"></i> Top Growth Areas</h3>
+      </div>
+      <div class="card-body" id="topGrowthBody"></div>
+    </div>
+
+    <!-- Top Yield -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title"><i class="bi bi-coin gold"></i> Top Yield Areas</h3>
+      </div>
+      <div class="card-body" id="topYieldBody"></div>
+    </div>
+
+    <!-- Top Investment -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title"><i class="bi bi-trophy-fill blue"></i> Top Investment Scores</h3>
+      </div>
+      <div class="card-body" id="topScoreBody"></div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="two-col">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title"><i class="bi bi-bar-chart-fill gold"></i> Community Yield vs Growth</h3></div>
+      <div class="card-body"><canvas id="yieldGrowthChart" height="220"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3 class="card-title"><i class="bi bi-graph-up gold"></i> Investment Score Ranking</h3></div>
+      <div class="card-body"><canvas id="scoreRankChart" height="220"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Emerging Opportunities -->
+  <div class="card" id="emergingCard" style="display:none">
+    <div class="card-header">
+      <h3 class="card-title"><i class="bi bi-geo-alt-fill gold"></i> Emerging Opportunities</h3>
+    </div>
+    <div class="card-body" id="emergingBody"></div>
+  </div>
+
+  <!-- Four Insight Columns -->
+  <div class="two-col">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title"><i class="bi bi-person-check-fill blue"></i> Buyer Intelligence</h3></div>
+      <div class="card-body" id="buyerBody"></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3 class="card-title"><i class="bi bi-tag-fill green"></i> Seller Intelligence</h3></div>
+      <div class="card-body" id="sellerBody"></div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title"><i class="bi bi-briefcase-fill gold"></i> Investor Intelligence</h3></div>
+      <div class="card-body" id="investorBody"></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3 class="card-title"><i class="bi bi-exclamation-triangle-fill red"></i> Risk Alerts</h3></div>
+      <div class="card-body" id="riskBody"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Loader -->
+<div id="insightLoader" class="loader-overlay" style="display:none">
+  <div class="loader-box">
+    <div class="spinner"></div>
+    <p>Generating AI market intelligence...</p>
+    <p class="muted" style="font-size:.8rem">Analysing 9 communities across 6 dimensions</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let ygChart = null, srChart = null;
+
+async function generateInsights() {
+  const btn = document.getElementById('insightBtn');
+  btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Generating...';
+  document.getElementById('insightLoader').style.display = 'flex';
+
+  try {
+    const res  = await fetch('/api/generate-insights', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    const json = await res.json();
+    if (json.success) renderInsights(json.data);
+    else showToast(json.error, 'error');
+  } catch(err) { showToast('Error: '+err.message,'error'); }
+  finally {
+    btn.disabled=false; btn.innerHTML='<i class="bi bi-arrow-clockwise"></i> Refresh Intelligence';
+    document.getElementById('insightLoader').style.display='none';
+  }
+}
+
+function renderInsights(d) {
+  document.getElementById('insightResults').style.display = 'block';
+  document.getElementById('insightResults').scrollIntoView({behavior:'smooth'});
+
+  // Timestamp
+  document.getElementById('generatedAt').innerHTML =
+    `<i class="bi bi-clock"></i> Report generated: ${d.generated_at}`;
+
+  // AI Summary
+  if (d.ai_executive_summary) {
+    document.getElementById('aiSummaryBox').style.display = 'block';
+    document.getElementById('aiSummaryBody').innerHTML = `<p style="line-height:1.8">${d.ai_executive_summary.replace(/\n/g,'<br>')}</p>`;
+  }
+
+  // Overview
+  document.getElementById('marketSummary').textContent = d.market_overview.summary;
+  const ks = d.market_overview.key_stats;
+  document.getElementById('marketKpis').innerHTML = Object.entries(ks).map(([k,v]) => `
+    <div class="kpi-card small">
+      <div class="kpi-body">
+        <div class="kpi-val">${v}</div>
+        <div class="kpi-lbl">${k.replace(/_/g,' ').replace(/\b\w/g,l=>l.toUpperCase())}</div>
+      </div>
+    </div>`).join('');
+
+  // Top Growth
+  document.getElementById('topGrowthBody').innerHTML = d.top_growth.map((c,i) => `
+    <div class="insight-row">
+      <div class="ins-rank">${i+1}</div>
+      <div>
+        <div class="ins-name">${c.name}</div>
+        <div class="ins-val green">${c.growth}</div>
+        <div class="ins-note muted">${c.note}</div>
+      </div>
+    </div>`).join('');
+
+  // Top Yield
+  document.getElementById('topYieldBody').innerHTML = d.top_yield.map((c,i) => `
+    <div class="insight-row">
+      <div class="ins-rank gold-bg">${i+1}</div>
+      <div>
+        <div class="ins-name">${c.name}</div>
+        <div class="ins-val gold">${c.yield}</div>
+        <div class="ins-note muted">${c.note}</div>
+      </div>
+    </div>`).join('');
+
+  // Top Score
+  document.getElementById('topScoreBody').innerHTML = d.top_investment.map((c,i) => `
+    <div class="insight-row">
+      <div class="ins-rank blue-bg">${i+1}</div>
+      <div>
+        <div class="ins-name">${c.name}</div>
+        <div class="ins-val blue">${c.score}/100</div>
+        <div class="ins-note muted">${c.type} | ${c.risk} Risk</div>
+      </div>
+    </div>`).join('');
+
+  // Emerging
+  if (d.emerging && d.emerging.length) {
+    document.getElementById('emergingCard').style.display = 'block';
+    document.getElementById('emergingBody').innerHTML = `<div class="emerging-grid">` +
+      d.emerging.map(c => `
+        <div class="emerging-item">
+          <div class="em-name">${c.name}</div>
+          <div class="em-stats">
+            <span class="green">${c.growth} growth</span>
+            <span class="gold">${c.price_sqft}/sqft</span>
+          </div>
+          <div class="em-note muted">${c.note}</div>
+        </div>`).join('') + `</div>`;
+  }
+
+  // Insight lists
+  function insightList(items, icon, cls) {
+    return items.map(i => `<div class="insight-bullet"><i class="bi ${icon} ${cls}"></i><span>${i}</span></div>`).join('');
+  }
+  document.getElementById('buyerBody').innerHTML    = insightList(d.buyer_insights,   'bi-check-circle-fill', 'blue');
+  document.getElementById('sellerBody').innerHTML   = insightList(d.seller_insights,  'bi-check-circle-fill', 'green');
+  document.getElementById('investorBody').innerHTML = insightList(d.investor_insights,'bi-check-circle-fill', 'gold');
+  document.getElementById('riskBody').innerHTML     = insightList(d.risk_alerts,      'bi-exclamation-circle-fill', 'red');
+
+  // Charts — need community data from API
+  fetch('/api/communities').then(r=>r.json()).then(json => {
+    if (!json.success) return;
+    const comms = json.data;
+    const labels = comms.map(c => c.name.replace('Jumeirah Village Circle (JVC)','JVC').replace('Dubai Hills Estate','D. Hills').replace('Arabian Ranches','Ar. Ranches').replace('Dubai Creek Harbour','Creek Hbr'));
+    const colors = ['#d4a843','#3b82f6','#10b981','#8b5cf6','#ef4444','#f97316','#06b6d4','#84cc16','#ec4899'];
+
+    if (ygChart) ygChart.destroy();
+    ygChart = new Chart(document.getElementById('yieldGrowthChart'), {
+      type:'bar',
+      data:{
+        labels,
+        datasets:[
+          {label:'Rental Yield %', data: comms.map(c=>c.rental_yield), backgroundColor:'rgba(212,168,67,.8)', borderRadius:4},
+          {label:'Growth Rate %',  data: comms.map(c=>c.growth_rate),  backgroundColor:'rgba(59,130,246,.8)',  borderRadius:4}
+        ]
+      },
+      options:{responsive:true,plugins:{legend:{labels:{color:'#e2e8f0'}}},
+        scales:{y:{ticks:{color:'#8892a2'},grid:{color:'rgba(255,255,255,.05)'}},x:{ticks:{color:'#8892a2'},grid:{display:false}}}}
+    });
+
+    const sorted = [...comms].sort((a,b)=>b.investment_score - a.investment_score);
+    if (srChart) srChart.destroy();
+    srChart = new Chart(document.getElementById('scoreRankChart'), {
+      type:'bar', indexAxis:'y',
+      data:{
+        labels: sorted.map(c=>c.name.replace('Jumeirah Village Circle (JVC)','JVC').replace('Dubai Hills Estate','D. Hills').replace('Arabian Ranches','Ar. Ranches').replace('Dubai Creek Harbour','Creek Hbr')),
+        datasets:[{label:'Investment Score', data:sorted.map(c=>c.investment_score),
+          backgroundColor: sorted.map((_,i)=>colors[i%colors.length]), borderRadius:4}]
+      },
+      options:{responsive:true,plugins:{legend:{display:false}},
+        scales:{x:{ticks:{color:'#8892a2',max:100},grid:{color:'rgba(255,255,255,.05)'}},y:{ticks:{color:'#e2e8f0'},grid:{display:false}}}}
+    });
+  });
+}
+
+// Auto-generate on page load
+generateInsights();
+</script>
+{% endblock %}

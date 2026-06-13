@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}Recommendations — Dubai RE Intelligence{% endblock %}
+{% block page_title %}Property Recommendation Engine{% endblock %}
+
+{% block content %}
+<div class="page-intro">
+  <i class="bi bi-stars gold"></i>
+  <div>
+    <h2>AI Property Recommendation Engine</h2>
+    <p class="muted">Tell us your investment profile and we'll recommend the best Dubai communities and property types — ranked by goal fit, yield, ROI, and risk.</p>
+  </div>
+</div>
+
+<div class="two-col">
+
+  <!-- ── PREFERENCES FORM ── -->
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title"><i class="bi bi-sliders gold"></i> Investor Profile</h3>
+    </div>
+    <div class="card-body">
+      <form id="recForm" onsubmit="getRecommendations(event)">
+
+        <div class="form-group">
+          <label>Total Budget (AED)</label>
+          <input type="number" id="budget" class="form-input" placeholder="2,000,000" required min="1" />
+          <div class="form-hint">Minimum varies by community (from AED 350,000 in JVC)</div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Preferred Property Type</label>
+            <select id="rec_type" class="form-input">
+              <option>Apartment</option>
+              <option>Studio</option>
+              <option>Villa</option>
+              <option>Townhouse</option>
+              <option>Any</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Investment Goal</label>
+            <select id="investment_goal" class="form-input">
+              <option value="Rental Income">Rental Income (Yield)</option>
+              <option value="Capital Growth">Capital Growth</option>
+              <option value="Balanced" selected>Balanced (Both)</option>
+              <option value="Holiday Home">Holiday Home</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Minimum Annual Rental Income Goal (AED, optional)</label>
+          <input type="number" id="rental_goal" class="form-input" placeholder="80,000" />
+        </div>
+
+        <div class="section-divider">Preferred Communities</div>
+        <div class="form-hint" style="margin-bottom:.75rem">Leave all selected for widest recommendations</div>
+
+        <div class="community-selector small">
+          {% for c in communities %}
+          <label class="comm-check-card small">
+            <input type="checkbox" name="rec_community" value="{{ c }}" class="rec-checkbox" checked />
+            <div class="check-content small">
+              <div class="check-name small">{{ c }}</div>
+            </div>
+          </label>
+          {% endfor %}
+        </div>
+
+        <div style="display:flex;gap:.5rem;margin:.75rem 0">
+          <button type="button" class="btn btn-sm btn-outline" onclick="document.querySelectorAll('.rec-checkbox').forEach(c=>c.checked=true)">All</button>
+          <button type="button" class="btn btn-sm btn-outline" onclick="document.querySelectorAll('.rec-checkbox').forEach(c=>c.checked=false)">None</button>
+        </div>
+
+        <button type="submit" class="btn btn-gold btn-full" id="recBtn">
+          <i class="bi bi-stars"></i> Find My Best Investments
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── RESULTS ── -->
+  <div>
+    <div id="recSummary" style="display:none" class="card rec-summary-card">
+      <div class="card-body" id="recSummaryBody"></div>
+    </div>
+    <div id="recResults"></div>
+  </div>
+</div>
+
+<!-- Loader -->
+<div id="recLoader" class="loader-overlay" style="display:none">
+  <div class="loader-box"><div class="spinner"></div><p>Generating AI recommendations...</p></div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function getRecommendations(e) {
+  e.preventDefault();
+  const btn = document.getElementById('recBtn');
+  btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Analyzing...';
+  document.getElementById('recLoader').style.display = 'flex';
+
+  const areas = [...document.querySelectorAll('.rec-checkbox:checked')].map(c => c.value);
+  const payload = {
+    budget:           parseFloat(document.getElementById('budget').value) || 0,
+    property_type:    document.getElementById('rec_type').value,
+    investment_goal:  document.getElementById('investment_goal').value,
+    rental_goal:      parseFloat(document.getElementById('rental_goal').value) || 0,
+    preferred_areas:  areas
+  };
+
+  try {
+    const res  = await fetch('/api/get-recommendations', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (json.success) renderRecs(json.data, payload);
+    else showToast(json.error, 'error');
+  } catch(err) { showToast('Error: '+err.message,'error'); }
+  finally {
+    btn.disabled=false; btn.innerHTML='<i class="bi bi-stars"></i> Find My Best Investments';
+    document.getElementById('recLoader').style.display='none';
+  }
+}
+
+function renderRecs(data, profile) {
+  if (!data.length) {
+    document.getElementById('recResults').innerHTML = `
+      <div class="empty-state">
+        <i class="bi bi-search"></i>
+        <p>No matching communities found for your budget and preferences.<br>Try increasing your budget or selecting more communities.</p>
+      </div>`;
+    return;
+  }
+
+  // Summary
+  document.getElementById('recSummary').style.display = 'block';
+  document.getElementById('recSummaryBody').innerHTML = `
+    <div class="rec-summary">
+      <i class="bi bi-check-circle-fill green"></i>
+      <div>
+        Found <strong>${data.length} investment opportunities</strong> matching your
+        <strong>AED ${fmtNum(profile.budget)}</strong> budget
+        for <strong>${profile.investment_goal}</strong> in
+        <strong>${profile.property_type}</strong> properties.
+      </div>
+    </div>`;
+
+  const colors = ['#d4a843','#3b82f6','#10b981','#8b5cf6','#ef4444','#f97316'];
+
+  document.getElementById('recResults').innerHTML = data.map((r, i) => `
+    <div class="card rec-card" style="border-left:3px solid ${colors[i%colors.length]}">
+      <div class="card-header">
+        <div class="rec-header">
+          <div>
+            <div class="rec-rank">#${i+1} Recommendation</div>
+            <h3 class="rec-community">${r.community}</h3>
+            <span class="badge badge-muted">${r.type}</span>
+            <span class="badge ${r.risk_level==='Low'?'badge-green':r.risk_level.includes('Medium')?'badge-blue':'badge-red'}">${r.risk_level} Risk</span>
+          </div>
+          <div class="rec-fit-score">
+            <div class="fit-circle" style="--fit:${r.goal_fit}">
+              <span>${r.goal_fit}%</span>
+            </div>
+            <div class="fit-label">Goal Fit</div>
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="rec-metrics">
+          <div class="rec-metric">
+            <div class="rm-val green">${r.gross_yield}%</div>
+            <div class="rm-lbl">Gross Yield</div>
+          </div>
+          <div class="rec-metric">
+            <div class="rm-val blue">${r.total_roi}%</div>
+            <div class="rm-lbl">Total ROI</div>
+          </div>
+          <div class="rec-metric">
+            <div class="rm-val purple">${r.growth_rate}%</div>
+            <div class="rm-lbl">Annual Growth</div>
+          </div>
+          <div class="rec-metric">
+            <div class="rm-val gold">AED ${fmtNum(r.fv_5yr)}</div>
+            <div class="rm-lbl">Value in 5 Yrs</div>
+          </div>
+          <div class="rec-metric">
+            <div class="rm-val">${r.investment_score}/100</div>
+            <div class="rm-lbl">Inv. Score</div>
+          </div>
+          <div class="rec-metric">
+            <div class="rm-val green">AED ${fmtNum(r.est_annual_rent)}</div>
+            <div class="rm-lbl">Est. Annual Rent</div>
+          </div>
+        </div>
+
+        <div class="rec-details">
+          <div>
+            <div class="detail-label">Estimated Price</div>
+            <div class="detail-val">AED ${fmtNum(r.estimated_price)}</div>
+          </div>
+          <div>
+            <div class="detail-label">Est. Area</div>
+            <div class="detail-val">${fmtNum(r.estimated_area)} sq ft</div>
+          </div>
+          <div>
+            <div class="detail-label">5-Yr Capital Gain</div>
+            <div class="detail-val green">AED ${fmtNum(r.capital_gain_5yr)}</div>
+          </div>
+        </div>
+
+        <div class="strengths-list">
+          ${r.strengths.map(s => `<span class="strength-pill"><i class="bi bi-check2"></i>${s}</span>`).join('')}
+        </div>
+
+        <div class="rec-summary-text">${r.summary}</div>
+        <div class="rec-best-for muted"><i class="bi bi-person-fill"></i> Best for: ${r.best_for}</div>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('recResults').scrollIntoView({behavior:'smooth'});
+}
+</script>
+{% endblock %}

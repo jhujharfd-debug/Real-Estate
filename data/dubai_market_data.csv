@@ -1,0 +1,10 @@
+community,avg_price_sqft,avg_annual_rent,growth_rate,rental_yield,investment_score,property_type,risk_level,min_price,max_price
+Dubai Marina,1850,125000,8.5,6.2,85,Waterfront,Medium,800000,15000000
+Downtown Dubai,2200,155000,7.8,5.8,87,Urban Premium,Low,1200000,50000000
+Business Bay,1650,110000,9.2,6.8,83,Business District,Medium,600000,12000000
+Jumeirah Village Circle (JVC),950,65000,10.5,7.8,80,Affordable,Medium-Low,350000,3000000
+Palm Jumeirah,2800,200000,6.5,5.2,82,Ultra-Luxury,Low-Medium,2000000,200000000
+Dubai Hills Estate,1450,140000,11.2,5.9,84,Premium Family,Low,1500000,25000000
+Arabian Ranches,1200,180000,7.2,5.5,78,Villa Community,Low,2500000,20000000
+Meydan,1350,95000,12.8,6.5,79,Emerging Premium,Medium,800000,15000000
+Dubai Creek Harbour,1750,105000,13.5,6.0,81,Waterfront Emerging,Medium,900000,20000000
