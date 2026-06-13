@@ -31,12 +31,14 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB upload cap
 
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
-DATABASE    = os.path.join(BASE_DIR, 'database', 'realestate.db')
 DATA_DIR    = os.path.join(BASE_DIR, 'data')
-UPLOAD_DIR  = os.path.join(BASE_DIR, 'uploads')
 
-for d in ['database', 'data', 'uploads']:
-    os.makedirs(os.path.join(BASE_DIR, d), exist_ok=True)
+# On Vercel only /tmp is writable; fall back to local paths for dev
+_WRITABLE   = '/tmp' if os.environ.get('VERCEL') else BASE_DIR
+DATABASE    = os.path.join(_WRITABLE, 'realestate.db')
+UPLOAD_DIR  = os.path.join(_WRITABLE, 'uploads')
+
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # ── OpenAI (optional) ─────────────────────────────────────────────────────────
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
@@ -995,13 +997,12 @@ def api_communities():
 # ENTRY POINT
 # ══════════════════════════════════════════════════════════════════════════════
 
+init_db()
+
 if __name__ == '__main__':
     print("=" * 62)
     print("   Dubai Real Estate Intelligence Agent  v1.0")
     print("=" * 62)
-    print("  Initialising database ...")
-    init_db()
-    print("  Database ready.")
     print("  OpenAI:", "Connected" if openai_client else "Not configured (rule-based mode)")
     print("  Server: http://127.0.0.1:5000")
     print("=" * 62)
